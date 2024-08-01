@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Register with Google</title>
+    <script>
+      async function submitForm(event) {
+          event.preventDefault();
+
+          var form = event.target;
+          var formData = new FormData(form);
+
+          try {
+              let response = await fetch('/register-user', {
+                  method: 'POST',
+                  body: formData,
+                  redirect: 'follow'
+              });
+
+              if (response.redirected) {
+                  window.location.href = response.url;
+              } else {
+                  let data = await response.json();
+                  console.log('Success:', data);
+                  alert('Registration successful!');
+              }
+          } catch (error) {
+              console.error('Error:', error);
+          }
+      }
+    </script>
+</head>
+<body
+    style="
+        font-family: Arial, sans-serif;
+        background-color: #f0f0f0;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+    "
+>
+<form action="/register" method="POST" onsubmit="submitForm(event)">
+    <div>
+        <h1 style="color: #333; margin-bottom: 20px">Register</h1>
+        <input
+            type="text"
+            name="name"
+            placeholder="Name"
+            style="
+                padding: 10px;
+                margin-bottom: 10px;
+                width: 100%;
+                box-sizing: border-box;
+            "
+        />
+        <input
+            type="email"
+            name="email"
+            placeholder="Email"
+            style="
+                padding: 10px;
+                margin-bottom: 10px;
+                width: 100%;
+                box-sizing: border-box;
+            "
+        />
+        <input
+            type="password"
+            name="password"
+            placeholder="Password"
+            style="
+                padding: 10px;
+                margin-bottom: 10px;
+                width: 100%;
+                box-sizing: border-box;
+            "
+        />
+        <button
+            type="submit"
+            style="
+                padding: 10px;
+                margin-top: 10px;
+                width: 100%;
+                box-sizing: border-box;
+                background-color: #007bff;
+                color: white;
+                border: none;
+                cursor: pointer;
+            "
+        >
+            Register
+        </button>
+    </div>
+
+</body>
