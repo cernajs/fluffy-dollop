@@ -1,11 +1,13 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
 	"log"
 	"os"
 
 	handlers "testauth/auth"
+	database "testauth/db"
 	login "testauth/login"
 
 	"github.com/gin-gonic/gin"
@@ -33,28 +35,29 @@ func main() {
 
 	handlers.SetupAuth(authParams)
 
-	dbParams := login.DBParams{
-		DBPassword:       os.Getenv("DB_PASSWORD"),
-		ConnectionString: fmt.Sprintf("root:%s@tcp(127.0.0.1:3306)/test", os.Getenv("DB_PASSWORD")),
+	connectionString := fmt.Sprintf("root:%s@tcp(127.0.0.1:3306)/test", os.Getenv("DB_PASSWORD"))
+	db, err := sql.Open("mysql", connectionString)
+	if err != nil {
+		log.Fatal(err)
 	}
 
-	if dbParams.DBPassword == "" || dbParams.ConnectionString == "" {
-		log.Fatal("Environment variables (DB_PASSWORD, CONNECTION_STRING) are required")
-	}
+	defer db.Close()
 
-	login.SetupDB(dbParams)
+	dbConnection := database.NewMySQLDBconnection(db)
+	login.SetDBConnection(dbConnection)
 
 	// google oauth
 	r.GET("/", handlers.Home)
 	r.GET("/auth/:provider", handlers.SignInWithProvider)
 	r.GET("/auth/:provider/callback", handlers.CallbackHandler)
-	r.GET("/success", handlers.Success)
 
 	// login/register
 	r.POST("/login", login.Login)
 
 	r.GET("/register", login.Register)
 	r.POST("/register-user", login.RegisterUser)
+
+	r.GET("/success", login.RequiresAuth, handlers.Success)
 
 	r.Run(":5000")
 }

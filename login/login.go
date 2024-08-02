@@ -1,47 +1,54 @@
 package login
 
 import (
-	"database/sql"
-	"html/template"
+	"context"
 	"log"
 	"net/http"
+	db "testauth/db"
+	"text/template"
+	"time"
 
 	"github.com/gin-gonic/gin"
-	_ "github.com/go-sql-driver/mysql"
+	"github.com/golang-jwt/jwt/v5"
+	//"golang.org/x/crypto/bcrypt"
 )
 
-type DBParams struct {
-	DBPassword       string
-	ConnectionString string
-}
+var dbConnection db.IDBconnection
 
-var dbParams DBParams
-
-func SetupDB(params DBParams) {
-	dbParams = params
+func SetDBConnection(db db.IDBconnection) {
+	dbConnection = db
 }
 
 func Login(c *gin.Context) {
-	db, err := sql.Open("mysql", dbParams.ConnectionString)
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	email := c.PostForm("email")
 	password := c.PostForm("password")
 
-	var name string
-	err = db.QueryRow("SELECT name FROM users WHERE email = ? AND password = ?", email, password).Scan(&name)
+	//hash, err := bcrypt.GenerateFromPassword([]byte(password),10)
+
+	ctx := context.Background()
+	//name, err := dbConnection.FindUserByEmailAndPassword(ctx, email, password)
+	_, err := dbConnection.FindUserByEmailAndPassword(ctx, email, password)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"email": email,
+		"exp":   time.Now().Add(time.Hour * 24).Unix(),
+	})
+
+	tokenString, err := token.SignedString([]byte("secret")) //os.Getenv("SECRET"))
 
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 
-	//c.JSON(http.StatusOK, gin.H{"name": name})
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie("token", tokenString, 3600, "/", "", false, true)
 
 	c.Redirect(http.StatusFound, "/success")
-
-	defer db.Close()
 }
 
 func Register(c *gin.Context) {
@@ -59,21 +66,47 @@ func Register(c *gin.Context) {
 }
 
 func RegisterUser(c *gin.Context) {
-	db, err := sql.Open("mysql", dbParams.ConnectionString)
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	name := c.PostForm("name")
 	email := c.PostForm("email")
 	password := c.PostForm("password")
 
-	_, err = db.Exec("INSERT INTO users (name, email, password) VALUES (?, ?, ?)", name, email, password)
+	ctx := context.Background()
+	err := dbConnection.CreateUser(ctx, name, email, password)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 
 	c.Redirect(http.StatusFound, "/success")
+}
 
-	defer db.Close()
+func RequiresAuth(c *gin.Context) {
+
+	cookie, err := c.Cookie("token")
+	log.Default().Println("Cookie: ", cookie)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	token, err := jwt.Parse(cookie, func(token *jwt.Token) (interface{}, error) {
+		return []byte("secret"), nil
+	})
+
+	if err != nil || !token.Valid {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	log.Default().Println("Claims: ", claims)
+	log.Default().Println("OK: ", ok)
+	if !ok || !token.Valid {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	// You can set claims to context if needed
+	c.Set("email", claims["email"])
+	c.Next()
 }
